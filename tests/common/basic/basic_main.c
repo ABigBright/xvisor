@@ -369,10 +369,20 @@ void basic_cmd_copy(int argc, char **argv)
 	src = (void *)(virtual_addr_t)basic_hexstr2ulonglong(argv[2]);
 	count = basic_hexstr2uint(argv[3]);
 
+    basic_puts("dst:");
+    basic_puts(argv[1]);
+    basic_puts("\n");
+    basic_puts("src:");
+    basic_puts(argv[2]);
+    basic_puts("\n");
+    basic_puts("len:");
+    basic_puts(argv[3]);
+    basic_puts("\n");
 	/* Disable timer and get start timestamp */
 	arch_board_timer_disable();
 	tstamp = arch_board_timer_timestamp();
 
+    basic_puts("1:\n");
 	/* It might happen that we are running Basic firmware
 	 * after a reboot from Guest Linux in which case both
 	 * I-Cache and D-Cache will have stale contents. We need
@@ -381,36 +391,48 @@ void basic_cmd_copy(int argc, char **argv)
 	 * MMU ON.
 	 */
 	arch_clean_invalidate_dcache_mva_range(dest_va, dest_va + count);
+    basic_puts("2:\n");
 
 	/* Copy contents */
 	if (!((virtual_addr_t)dst & 0x7) &&
 	    !((virtual_addr_t)src & 0x7) &&
 	    !(count & 0x7)) {
-		for (i = 0; i < (count/sizeof(u64)); i++) {
-			((u64 *)dst)[i] = ((u64 *)src)[i];
-		}
+    basic_puts("3.1:\n");
+        for (i = 0; i < (count/sizeof(u64)); i++) {
+            ((u64 *)dst)[i] = ((u64 *)src)[i];
+        }
+    basic_puts("3.2:\n");
 	} else if (!((virtual_addr_t)dst & 0x3) &&
 		   !((virtual_addr_t)src & 0x3) &&
 		   !(count & 0x3)) {
+    basic_puts("3.3:\n");
 		for (i = 0; i < (count/sizeof(u32)); i++) {
 			((u32 *)dst)[i] = ((u32 *)src)[i];
 		}
+    basic_puts("3.4:\n");
 	} else if (!((virtual_addr_t)dst & 0x1) &&
 		   !((virtual_addr_t)src & 0x1) &&
 		   !(count & 0x1)) {
+    basic_puts("3.5:\n");
 		for (i = 0; i < (count/sizeof(u16)); i++) {
 			((u16 *)dst)[i] = ((u16 *)src)[i];
 		}
+    basic_puts("3.6:\n");
 	} else {
+    basic_puts("3.7:\n");
 		for (i = 0; i < (count/sizeof(u8)); i++) {
 			((u8 *)dst)[i] = ((u8 *)src)[i];
 		}
+    basic_puts("3.8:\n");
 	}
 
 	/* Enable timer and get end timestamp */
 	tstamp = arch_board_timer_timestamp() - tstamp;
+    basic_puts("4:\n");
 	tstamp = arch_udiv64(tstamp, 1000);
+    basic_puts("5:\n");
 	arch_board_timer_enable();
+    basic_puts("6:\n");
 
 	/* Print time taken */
 	basic_ulonglong2str(time, tstamp);
