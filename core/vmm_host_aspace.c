@@ -858,6 +858,7 @@ static int __init host_aspace_init_primary(void)
 			return VMM_EINVALID;
 		}
 		/* Ensure this doesn't overflow for 32-bit */
+        /* also check our code load addr is within the memory */
 		ram_end = (u64)ram_start + (u64)ram_size;
 		if ((ram_start <= arch_code_paddr_start()) &&
 		    (arch_code_paddr_start() < ram_end)) {
@@ -870,7 +871,9 @@ static int __init host_aspace_init_primary(void)
 	}
 
 	/* Determine VAPOOL start and size */
-	vapool_start = arch_cpu_aspace_vapool_start();
+	vapool_start = arch_cpu_aspace_vapool_start(); /* code_start vaddr */
+
+    /* get total ram size base on CONFIG_VAPOOL_SIZE_MB */
 	vapool_size = arch_cpu_aspace_vapool_estimate_size(ram_total_size);
 
 	/* Determine VAPOOL house-keeping size based on VAPOOL size */
@@ -927,6 +930,40 @@ static int __init host_aspace_init_primary(void)
 	vapool_hkstart = core_resv_va;
 	ram_hkstart = vapool_hkstart + vapool_hksize;
 	mhash_hkstart = ram_hkstart + ram_hksize;
+
+
+    
+    /* About the vapool region layout, see as follows, */
+
+    /**
+     *
+    +-code_start   +-code_end
+    |-vapool_start |-core_resv_va
+    |              |-vapool_hkstart
+    |   .text      |
+    |   .data      |         ram_hkstart
+    |   .bss       |         |         mhash_hkstart 
+    |              |         |         |
+    v              v         v         v
+    |--------------|---------|---------|--------|----------|
+
+    |              |<---+--->|         |        |          |
+    |                   v              |        |          |
+    |              vapool_hksize       |        |          |
+    |                                           |          |
+    |              |         |<---+--->|        |          |
+    |              |              v             |          |
+    |              |         ram_hksize         |          |
+    |              |                                       |
+    |              |                   |<--+--->|          |
+    |              |                       v               |
+    |              |                   mhash_hksize        |
+    |                                                      |
+    |              |<--------core_resv_sz------>|          |
+
+    |<-------------vapool_size---------------------------->|
+
+    **/
 
 	/* Initialize VAPOOL managment */
 	if ((rc = vmm_host_vapool_init(vapool_start,

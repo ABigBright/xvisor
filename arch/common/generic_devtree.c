@@ -130,6 +130,8 @@ int __init arch_devtree_ram_bank_setup(void)
 	memset(bank_data, 0, sizeof(bank_data));
 	j = 0;
 
+
+    /* why use `while' for loop memory, may be has multiple `memory node' */
 	while ((info.visited_count < CONFIG_MAX_RAM_BANK_COUNT) &&
 	       (j < array_size(bank_data))) {
 		fdt_node = libfdt_find_matching_node(&fdt, match_memory_node,
@@ -155,6 +157,35 @@ int __init arch_devtree_ram_bank_setup(void)
 		}
 
 		memset(dt_bank_data, 0, sizeof(dt_bank_data));
+
+        /* analyse dts `memory' node to get memory base addr and len, 
+           organize by addr - size pairs: */
+
+        /* memory node in dts: */
+
+        /***
+        memory {
+            device_type = "memory";
+            reg = <0x0 0x80000000 0x0 0x40000000>;
+                  |<---addr---->| |<---len----->|
+        };
+        ***/
+
+        /* dt_bank_data: */
+        /* +---------------+ */
+        /* | addr1   len1  | */
+        /* +---------------+ */
+        /* | addr2   len2  | */
+        /* +---------------+ */
+        /* | ...           | */
+        /* +---------------+ */
+        /* | addrn   lenn  | */
+        /* +---------------+ */
+        
+        /* illustration: */
+        /* addrx's size is base on address_cells  */
+        /* lenx's size is base on size_cells  */
+
 		rc = libfdt_get_property(&fdt, fdt_node,
 					 address_cells, size_cells,
 					 VMM_DEVTREE_REG_ATTR_NAME,
@@ -190,6 +221,18 @@ int __init arch_devtree_ram_bank_setup(void)
 	}
 
 	/* Sort banks based on start address */
+
+    /* bank_data:                        */
+    /*       +---------------+   ---     */
+    /* low:  | addr1   len1  |    ^      */
+    /*  |    +---------------+    |      */
+    /*  |    | addr2   len2  |    |      */
+    /*  |    +---------------+  bank_nr  */
+    /*  |    | ...           |    |      */
+    /*  v    +---------------+    |      */
+    /* high: | addrn   lenn  |    v      */
+    /*       +---------------+   ---     */
+
 	for (i = 0; i < (bank_nr - 1); i++) {
 		for (j = i + 1; j < bank_nr; j++) {
 			if (bank_data[(2 * i)] > bank_data[(2 * j)]) {

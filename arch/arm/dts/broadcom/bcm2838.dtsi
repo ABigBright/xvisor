@@ -95,5 +95,27 @@
 			compatible = "brcm,bcm2835-poweroff";
 			reg = <0xfe100000 0x114>;
 		};
+
+		sdhci: mmc@fe300000 {
+			compatible = "brcm,bcm2835-sdhci";
+			reg = <0xfe300000 0x100>;
+			interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH>;
+	        bus-width = <4>;
+			clocks = <&clk_mmc>;
+			status = "okay";
+		};
+	};
+
+
+	clocks {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		clk_mmc: mmc {
+			compatible = "fixed-clock";
+			reg = <0>;
+			#clock-cells = <0>;
+			clock-frequency = <100000000>;
+		};
 	};
 };
