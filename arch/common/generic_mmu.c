@@ -1452,6 +1452,131 @@ static void __init mmu_scan_initial_pgtbl(struct mmu_pgtbl *pgtbl)
 	}
 }
 
+/*
+ * 如果armv8的granule size是4K的话, 那么每级页表项个数最大9bits, 即512个条目项,
+ * 每个条目项占用8B, 所以 8B * 512 = 4KB
+ * 
+ * NOTE: we use 1/64th or 1.5625% of VAPOOL memory as translation table pool.
+ * For example if VAPOOL is 8 MB and page table size is 4KB then page table
+ * pool will be 128 KB or 32 (= 128 KB / 4 KB) page tables.
+ * 
+ * N = (CONFIG_VAPOOL_SIZE_MB * 2^10 * 2^10 ) / 64th / 4 * 2^10
+ *   = (CONFIG_VAPOOL_SIZE_MB * 2^20) / 2^6 / 2^12
+ *   = (CONFIG_VAPOOL_SIZE_MB * 2^20) / 2^6 * 2^12
+ *   = CONFIG_VAPOOL_SIZE_MB * (2^20 / 2^6 * 2^12)
+ *   = CONFIG_VAPOOL_SIZE_MB * 2^(20 - 6 -12)
+ *
+ * eg. 比如8MB的VPOOL, 那么保留区的页表池, 就是 32个4KB, 总共占用空间128KB
+ *
+ * mmu_ctrl成员说明:
+
+mmuctrl:
+
++----------------------------+
+|   +----------------+       |
+|   | pgtbl_base_va  |---+---|-------------------------------------+ 
+|   +----------------+   |   |                                     | 
+|   | pgtbl_base_pa  |---+   |                                     | 
+|   +----------------+       |                                     | 
+|                            |                                     | 
+|                            |                                     | 
+|   +----------------+       |                                     | 
+|   | ipgtbl_base_va |---+---|--------+                            | 
+|   +----------------+   |   |        |                            | 
+|   | ipgtbl_base_pa |---+   |        |                            | 
+|   +----------------+       |        |                            | 
+|                            |        |                            |
+|                            |        |                            |
+|   +--------------------+   |        |                            | 
+|   | pgtbl_pool_array[] |---|--------|--->pgtbl_pool_array[0]:    |     PGTBL_POOL(vpool保留区域的资源池):
+|   +--------------------+   |        |    +--------+ -            +-->- +-----------+ -
+|                            |        |    | tbl_va | |                | |           | |
+|                            |        |    +--------+ |                | |           | |
+|                            |        |    | tbl_pa | |  <==========>  | |    4KB    | |
+|   +---------------------+  |        |    +--------+ |                | |           | |
+|   | ipgtbl_pool_array[] |--|---+    |    | tbl_sz | |                | |           | |
+|   +---------------------+  |   |    |    +--------+ -                - +-----------+ |
+|                            |   |    |        .                         |           | |
+|                            |   |    |        .                         |    ...    | |
+|                            |   |    |        .                         |    ...    | |-> 32个
+|                            |   |    |    pgtbl_pool_array[n]:          |           | |
+|                            |   |    |                                  |           | |
+|                            |   |    |                                  +-----------+ |
+|                            |   |    |                                  |           | |
+|                            |   |    |                                  |           | |
+|                            |   |    |                                  |    4KB    | |
+|                            |   |    |                                  |           | |
+|                            |   |    |                                  |           | |
+|                            |   |    +----------------------------+     +-----------+ -
+|                            |   |                                 |
+|                            |   |                                 |
+|                            |   +-------->ipgtbl_pool_array[0]:   |      INIT_PGTBL_POOL:
+|                            |             +--------+ -            +-->- +-----------+ -
+|                            |             | tbl_va | |                | |           | |
+|                            |             +--------+ |                | |           | |
+|                            |             | tbl_pa | |  <===========> | |    4KB    | |
+|                            |             +--------+ |                | |           | |
+|                            |             | tbl_sz | |                | |           | |
+|                            |             +--------+ -                - +-----------+ |
+|                            |                 .                         |           | |
+|                            |                 .                         |           | |
+|                            |                 .                         |    ...    | |-> 8个
+|                            |             ipgtbl_pool_array[0]:         |           | |
+|                            |                                           |           | |
+|                            |                                           +-----------+ |
+|                            |                                           |           | |
+|                            |                                           |           | |
+|                            |                                           |    4KB    | |
+|                            |                                           |           | |
+|                            |                                           |           | |
+|                            |                                           +-----------+ -
+|   +-----------+            |
+|   | hyp_pgtbl |------------|----->hyp_pgtbl:              stage1_pgtbl_root(hypervisor页表资源池):
+|   +-----------+            |      +--------+ -            - +-----------+
+|                            |      | tbl_va | |            | |           |
+|                            |      +--------+ |            | |           |
+|                            |      | tbl_pa | |  <======>  | |    4KB    |
+|                            |      +--------+ |            | |           |
+|                            |      | tbl_sz | |            | |           |
+|                            |      +--------+ -            - +-----------+
+|                            |
+|  +----------------------+  |
+|  | pgtbl_pool_free_list |--|-----------------+               +---------------+
+|  +----------------------+  |                 v               |               v
++----------------------------+      +---------------------+    |   +----------------------+
+                                    | pgtbl_pool_array[0] |    |   | ipgtbl_pool_array[0] |
+                                    +---------------------+    |   +----------------------+
+                                               v               |               v
+                                    +---------------------+    |   +----------------------+
+                                    | pgtbl_pool_array[1] |    |   | ipgtbl_pool_array[1] |
+                                    +---------------------+    |   +----------------------+
+                                               v               |               v
+                                    +---------------------+    |   +----------------------+
+                                    |         ...         |    |   |          ...         |
+                                    +---------------------+    |   +----------------------+
+                                               v               |               v
+                                    +---------------------+    |   +----------------------+
+                                    | pgtbl_pool_array[n] |    |   | ipgtbl_pool_array[n] |
+                                    +---------------------+    |   +----------------------+
+                                               |               |
+                                               +---------------+
+
+关于mmu_ctrl结构的说明:
+                               
+pgtbl_base_va       : PGTBL_POOL(页表池)页表项的虚拟基地址
+pgtbl_base_pa       : PGTBL_POOL(页表池)页表项的物理基地址
+ipgtbl_base_va      : INIT_PGTBL_POOL的页表项的虚拟基地址
+ipgtbl_base_pa      : INIT_PGTBL_POOL的页表项的物理基地址
+pgtbl_pool_array[]  : 每个数组元素是一个页表对象,每个对象关联一个4K的空间的页表项, aarch64每个页表项8个字节
+ipgtbl_pool_array[] : 每个数组元素是一个页表对象,每个对象关联一个4K的空间的页表项, aarch64每个页表项8个字节
+hyp_pgtbl           : 单独对应一个4K空间的页表项
+pgtbl_pool_free_list: 初始化,把pgtbl_pool_array和ipgtbl_pool_array的页表对象链在一起, 后期通过动态分配alloc/free去使用页表对象,以及根据页表对象确定具体的页表项
+                              
+*
+*/                              
+
+
+
 int __init arch_cpu_aspace_primary_init(physical_addr_t *core_resv_pa,
 					virtual_addr_t *core_resv_va,
 					virtual_size_t *core_resv_sz,
@@ -1474,15 +1599,19 @@ int __init arch_cpu_aspace_primary_init(physical_addr_t *core_resv_pa,
 		return VMM_EINVALID;
 
 	/* Initial values of resv_va, resv_pa, and resv_sz */
-	pa = arch_code_paddr_start();
-	va = arch_code_vaddr_start();
+	pa = arch_code_paddr_start(); /* code load addr */
+	va = arch_code_vaddr_start(); /* code vma */
 	sz = arch_code_size();
 	resv_va = va + sz;
 	resv_pa = pa + sz;
 	resv_sz = 0;
+
+    /* make sure resv_va is aligned to l0_size */
 	if (resv_va & (l0_size - 1)) {
 		resv_va += l0_size - (resv_va & (l0_size - 1));
 	}
+
+    /* make sure resv_pa is aligned to l0_size */
 	if (resv_pa & (l0_size - 1)) {
 		resv_pa += l0_size - (resv_pa & (l0_size - 1));
 	}
