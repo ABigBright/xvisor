@@ -1253,6 +1253,7 @@ int vmm_guest_aspace_reset(struct vmm_guest *guest)
 		vmm_read_unlock_irqrestore_lite(root_lock, flags);
 		if ((reg->flags & VMM_REGION_ISDEVICE) &&
 		    !(reg->flags & VMM_REGION_ALIAS)) {
+            /* CUS1: call emulation driver's `reset' callback func */
 			vmm_devemu_reset_region(guest, reg);
 		}
 		vmm_read_lock_irqsave_lite(root_lock, flags);

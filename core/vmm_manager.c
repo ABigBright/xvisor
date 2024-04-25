@@ -1110,6 +1110,12 @@ int vmm_manager_guest_shutdown_request(struct vmm_guest *guest)
 				manager_shutdown_request, NULL);
 }
 
+
+/* CUS1: gnode is point to guest dtb */
+/* eg. gnode point to parent node of virt-v8-guest, parent node name is guestn(n = 0, 1, ...) created by vfs guest_fdt_load command, gnode is more like as follows:
+ * guest0 {
+ *   virt-v8-guest.dtb
+ * } */
 struct vmm_guest *vmm_manager_guest_create(struct vmm_devtree_node *gnode)
 {
 	u32 val, vnum, gnum;
@@ -1162,6 +1168,7 @@ struct vmm_guest *vmm_manager_guest_create(struct vmm_devtree_node *gnode)
 	}
 
 	/* Add guest instance to guest list */
+    /* CUS1: add guest obj into vmm manager guest_list */
 	list_add_tail(&guest->head, &mngr.guest_list);
 
 	/* Increment guest count */
@@ -1176,6 +1183,8 @@ struct vmm_guest *vmm_manager_guest_create(struct vmm_devtree_node *gnode)
 #else
 	guest->is_big_endian = FALSE;
 #endif
+
+    /* CUS1: init guest object some member, including aspace, reg_iotree and some lock */
 	guest->reset_count = 0;
 	guest->reset_tstamp = vmm_timer_timestamp();
 	INIT_SPIN_LOCK(&guest->req_lock);
@@ -1213,6 +1222,7 @@ struct vmm_guest *vmm_manager_guest_create(struct vmm_devtree_node *gnode)
 		goto fail_destroy_guest;
 	}
 
+    /* CUS1: traverse the vcpu node */
 	vmm_devtree_for_each_child(vnode, vsnode) {
 		int index;
 		u32 cpu;
@@ -1495,6 +1505,7 @@ struct vmm_guest *vmm_manager_guest_create(struct vmm_devtree_node *gnode)
 	vmm_read_unlock_irqrestore_lite(&guest->vcpu_lock, flags);
 
 	/* Initialize arch guest context */
+    /* CUS1: alloc pagetable and get psci version */
 	if (arch_guest_init(guest)) {
 		goto fail_destroy_guest;
 	}

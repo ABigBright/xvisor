@@ -397,12 +397,12 @@ struct mmu_pgtbl *mmu_pgtbl_alloc(int stage, int level, u32 attr, u32 hw_tag)
 		return NULL;
 
 	if (level < 0)
-		level = arch_mmu_start_level(stage);
+		level = arch_mmu_start_level(stage); // always is 2, equeal level 1(from level 0 start) according armv8 trm
 
 	if (stage == MMU_STAGE1)
-		pgtbl = mmu_pgtbl_pool_alloc(stage, level);
+		pgtbl = mmu_pgtbl_pool_alloc(stage, level); // alloc from non-root pgtbl
 	else
-		pgtbl = mmu_pgtbl_nonpool_alloc(stage, level);
+		pgtbl = mmu_pgtbl_nonpool_alloc(stage, level); // dynamic alloc from heap
 	if (!pgtbl)
 		return NULL;
 
@@ -1510,7 +1510,7 @@ mmuctrl:
 |                            |   |    +----------------------------+     +-----------+ -
 |                            |   |                                 |
 |                            |   |                                 |
-|                            |   +-------->ipgtbl_pool_array[0]:   |      INIT_PGTBL_POOL:
+|                            |   +-------->ipgtbl_pool_array[0]:   |     INIT_PGTBL_POOL(stage1_pgtbl_nonroot):
 |                            |             +--------+ -            +-->- +-----------+ -
 |                            |             | tbl_va | |                | |           | |
 |                            |             +--------+ |                | |           | |
