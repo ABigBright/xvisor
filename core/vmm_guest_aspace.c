@@ -790,6 +790,7 @@ static int region_add(struct vmm_guest *guest,
 	}
 
 	/* Determine region guest physical address */
+    /* CUS1: guest physical address is so called ipa for hypervisor */
 	rc = vmm_devtree_read_physaddr(reg->node,
 				VMM_DEVTREE_GUEST_PHYS_ATTR_NAME,
 				&reg->gphys_addr);
