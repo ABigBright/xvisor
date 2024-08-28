@@ -508,7 +508,7 @@ static void __vgic_sync_vcpu_hwstate(struct vgic_guest_state *s,
 	elrsr[0] &= vs->lr_used[0];
 	elrsr[1] &= vs->lr_used[1];
 	for (lr = 0; lr < vgich.params.lr_cnt; lr++) {
-		if (!VGIC_TEST_ELRSR(elrsr, lr)) {
+		if (!VGIC_TEST_ELRSR(elrsr, lr)) { // skip the idle lr, including 2 part, 1. lr has an eoi event 2. lr used to inject virtual irq
 			continue;
 		}
 
